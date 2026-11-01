@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dzlabs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: ${POSTGRES_DB:-dzlabs}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./dzlabs/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dzlabs} -d ${POSTGRES_DB:-dzlabs}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Dentro de la red de compose el host es "postgres", no localhost
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dzlabs}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dzlabs}
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://n8n:5678/webhook/dzlabs-eventos}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    environment:
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?define N8N_ENCRYPTION_KEY en .env}
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-sebas}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:?define N8N_BASIC_AUTH_PASSWORD en .env}
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      WEBHOOK_URL: ${N8N_PUBLIC_URL:-http://localhost:5678/}
+      GENERIC_TIMEZONE: America/Bogota
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-dzlabs}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-dzlabs}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_POSTGRESDB_SCHEMA: n8n
+      # Variables que usan los workflows importados desde /n8n
+      DZ_API_URL: http://api:8000
+      DZ_INBOUND_TOKEN: ${INBOUND_API_TOKEN}
+      DZ_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET}
+      DZ_SEBAS_WHATSAPP: ${SEBAS_WHATSAPP}
+      DZ_TWILIO_FROM: ${TWILIO_WHATSAPP_FROM}
+      DZ_CAL_URL: ${CAL_BOOKING_URL}
+    ports:
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  n8n_data:

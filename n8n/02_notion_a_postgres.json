@@ -1,0 +1,41 @@
+{
+  "name": "DZ Labs · Notion → Postgres (Etapa cerrado/agendado)",
+  "nodes": [
+    {
+      "parameters": {"event": "pagedUpdatedInDatabase", "databaseId": "REEMPLAZAR_ID_DATABASE_PIPELINE", "pollTimes": {"item": [{"mode": "everyMinute"}]}, "simple": true},
+      "name": "Notion Trigger", "type": "n8n-nodes-base.notionTrigger", "typeVersion": 1, "position": [0, 300],
+      "credentials": {"notionApi": {"id": "REEMPLAZAR", "name": "Notion DZ Labs"}}
+    },
+    {
+      "parameters": {"conditions": {"conditions": [
+        {"leftValue": "={{ $json.Etapa }}", "rightValue": "cerrado", "operator": {"type": "string", "operation": "equals"}},
+        {"leftValue": "={{ $json.Etapa }}", "rightValue": "agendado", "operator": {"type": "string", "operation": "equals"}}
+      ], "combinator": "or"}},
+      "name": "¿cerrado o agendado?", "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst body = JSON.stringify({ cliente_id: $json.cliente_id, etapa: $json.Etapa, origen: 'notion' });\nconst ts = String(Math.floor(Date.now() / 1000));\nconst firma = crypto.createHmac('sha256', $env.DZ_WEBHOOK_SECRET).update(ts + '.' + body).digest('hex');\nreturn [{ json: { body, ts, firma } }];"
+      },
+      "name": "Code · Firmar", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [440, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "={{ $env.DZ_API_URL }}/webhooks/etapa", "sendHeaders": true,
+        "headerParameters": {"parameters": [
+          {"name": "Content-Type", "value": "application/json"},
+          {"name": "X-DZ-Timestamp", "value": "={{ $json.ts }}"},
+          {"name": "X-DZ-Signature", "value": "={{ $json.firma }}"}
+        ]},
+        "sendBody": true, "specifyBody": "string", "body": "={{ $json.body }}", "options": {}
+      },
+      "name": "HTTP · /webhooks/etapa", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [660, 200]
+    }
+  ],
+  "connections": {
+    "Notion Trigger": {"main": [[{"node": "¿cerrado o agendado?", "type": "main", "index": 0}]]},
+    "¿cerrado o agendado?": {"main": [[{"node": "Code · Firmar", "type": "main", "index": 0}], []]},
+    "Code · Firmar": {"main": [[{"node": "HTTP · /webhooks/etapa", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}

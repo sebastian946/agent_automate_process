@@ -1,0 +1,60 @@
+[
+  {
+    "id": "calificado_taller_dueno_urgente",
+    "calificado": true,
+    "mensajes": [
+      {"role": "user", "content": "Hola, tengo un taller mecánico en Bogotá, somos 6 personas"},
+      {"role": "assistant", "content": [{"type": "text", "text": "¡Hola! ¿Qué parte del día a día te quita más tiempo?"}]},
+      {"role": "user", "content": "Las citas. Todo lo agendamos por WhatsApp a mano y se nos pierden clientes. Yo soy el dueño y lo necesito resolver este mes, ya tengo presupuesto apartado para esto."}
+    ],
+    "perfil_esperado": {"necesidad": "si", "autoridad": "si", "presupuesto": "si", "urgencia": "alta"}
+  },
+  {
+    "id": "calificado_clinica_gerente_trimestre",
+    "calificado": true,
+    "mensajes": [
+      {"role": "user", "content": "Soy gerente de una clínica odontológica. Queremos automatizar recordatorios y confirmaciones de citas, perdemos 20% por inasistencias."},
+      {"role": "assistant", "content": [{"type": "text", "text": "Entiendo. ¿Para cuándo lo necesitan?"}]},
+      {"role": "user", "content": "Idealmente este trimestre. Yo decido con el dueño pero tengo luz verde."}
+    ],
+    "perfil_esperado": {"necesidad": "si", "autoridad": "si", "presupuesto": "desconocido", "urgencia": "media"}
+  },
+  {
+    "id": "calificado_ecommerce_presupuesto",
+    "calificado": true,
+    "mensajes": [
+      {"role": "user", "content": "Tengo una tienda online de ropa. Respondemos 200 chats al día a mano y no damos abasto."},
+      {"role": "assistant", "content": [{"type": "text", "text": "¿Quién toma la decisión de contratar algo así?"}]},
+      {"role": "user", "content": "Yo, soy la fundadora. Ya pagamos Shopify y un CRM, así que invertir en esto no es problema. Lo quiero para antes de Navidad."}
+    ],
+    "perfil_esperado": {"necesidad": "si", "autoridad": "si", "presupuesto": "si", "urgencia": "alta"}
+  },
+  {
+    "id": "no_calificado_curioso",
+    "calificado": false,
+    "mensajes": [
+      {"role": "user", "content": "Hola, ¿qué hacen ustedes exactamente? Vi un post en LinkedIn"},
+      {"role": "assistant", "content": [{"type": "text", "text": "Construimos sistemas y automatizaciones a medida. ¿Tienes algún proceso que te duela hoy?"}]},
+      {"role": "user", "content": "No realmente, solo curiosidad. Trabajo en una empresa grande como analista."}
+    ],
+    "perfil_esperado": {"necesidad": "no", "autoridad": "no", "presupuesto": "desconocido", "urgencia": "baja"}
+  },
+  {
+    "id": "no_calificado_sin_autoridad_ni_urgencia",
+    "calificado": false,
+    "mensajes": [
+      {"role": "user", "content": "Soy recepcionista en un consultorio, el doctor me pidió averiguar opciones para la agenda"},
+      {"role": "assistant", "content": [{"type": "text", "text": "Claro. ¿Qué problema tienen con la agenda hoy?"}]},
+      {"role": "user", "content": "Se nos cruzan citas a veces. Pero el doctor dice que no es urgente, algún día lo mirará."}
+    ],
+    "perfil_esperado": {"necesidad": "si", "autoridad": "no", "presupuesto": "desconocido", "urgencia": "baja"}
+  },
+  {
+    "id": "no_calificado_estudiante",
+    "calificado": false,
+    "mensajes": [
+      {"role": "user", "content": "Hola, soy estudiante y quiero hacer una app como Rappi para mi tesis, ¿me pueden ayudar gratis?"}
+    ],
+    "perfil_esperado": {"necesidad": "no", "autoridad": "desconocido", "presupuesto": "no", "urgencia": "desconocido"}
+  }
+]

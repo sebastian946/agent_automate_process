@@ -1,0 +1,97 @@
+{
+  "name": "DZ Labs · Eventos (handoff, espejo Notion, diagnóstico, incidencias)",
+  "nodes": [
+    {
+      "parameters": {"httpMethod": "POST", "path": "dzlabs-eventos", "responseMode": "responseNode", "options": {"rawBody": true}},
+      "name": "Webhook eventos", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst secret = $env.DZ_WEBHOOK_SECRET;\nconst raw = $input.first().binary?.data ? Buffer.from($input.first().binary.data.data, 'base64').toString() : JSON.stringify($input.first().json.body);\nconst firma = $input.first().json.headers['x-dz-signature'];\nconst esperado = crypto.createHmac('sha256', secret).update(raw).digest('hex');\nconst ok = firma && firma.length === esperado.length && crypto.timingSafeEqual(Buffer.from(firma), Buffer.from(esperado));\nreturn [{ json: { ok, ...(ok ? JSON.parse(raw) : {}) } }];"
+      },
+      "name": "Code · Verificar firma", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [220, 300]
+    },
+    {
+      "parameters": {"conditions": {"options": {"caseSensitive": true, "typeValidation": "strict"}, "conditions": [{"leftValue": "={{ $json.ok }}", "rightValue": true, "operator": {"type": "boolean", "operation": "true"}}], "combinator": "and"}},
+      "name": "¿Firma válida?", "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [440, 300]
+    },
+    {
+      "parameters": {"respondWith": "json", "responseBody": "={{ { error: 'firma inválida' } }}", "options": {"responseCode": 403}},
+      "name": "403", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [660, 480]
+    },
+    {
+      "parameters": {"respondWith": "json", "responseBody": "={{ { ok: true } }}", "options": {"responseCode": 200}},
+      "name": "200", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [660, 120]
+    },
+    {
+      "parameters": {"rules": {"values": [
+        {"conditions": {"conditions": [{"leftValue": "={{ $json.tipo }}", "rightValue": "handoff", "operator": {"type": "string", "operation": "equals"}}]}, "renameOutput": true, "outputKey": "handoff"},
+        {"conditions": {"conditions": [{"leftValue": "={{ $json.tipo }}", "rightValue": "diagnostico_cerrado", "operator": {"type": "string", "operation": "equals"}}]}, "renameOutput": true, "outputKey": "diagnostico"},
+        {"conditions": {"conditions": [{"leftValue": "={{ $json.tipo }}", "rightValue": "incidencia", "operator": {"type": "string", "operation": "equals"}}]}, "renameOutput": true, "outputKey": "incidencia"}
+      ]}, "options": {"fallbackOutput": "extra"}},
+      "name": "Switch tipo", "type": "n8n-nodes-base.switch", "typeVersion": 3, "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const f = $json.ficha; const p = f.perfil || {}; const sug = (p.sugerencias_cierre || []).map((s, i) => `${i + 1}. ${s}`).join('\\n');\nconst msg = `🔔 Nuevo handoff (${$json.motivo}, urgencia ${$json.urgencia})\\n👤 ${p.nombre || '—'} · ${p.empresa || '—'} (${p.sector || '—'})\\n📱 ${$json.cliente_id} vía ${$json.canal}\\n🎯 Producto: ${p.producto_interes}\\n😣 Dolor: ${p.dolor || '—'}\\n📝 ${$json.resumen}\\n\\n💡 Sugerencias de cierre:\\n${sug}\\n\\n🔗 Ficha: ${$json.link_hilo}\\n📅 Agenda: ${$json.cal_url || $env.DZ_CAL_URL}`;\nreturn [{ json: { mensaje: msg } }];"
+      },
+      "name": "Code · Formatear aviso", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1100, 120]
+    },
+    {
+      "parameters": {"resource": "message", "operation": "send", "from": "={{ $env.DZ_TWILIO_FROM }}", "to": "={{ $env.DZ_SEBAS_WHATSAPP }}", "toWhatsapp": true, "message": "={{ $json.mensaje }}"},
+      "name": "Twilio · WhatsApp a Sebas", "type": "n8n-nodes-base.twilio", "typeVersion": 1, "position": [1320, 120],
+      "credentials": {"twilioApi": {"id": "REEMPLAZAR", "name": "Twilio DZ Labs"}}
+    },
+    {
+      "parameters": {
+        "resource": "databasePage", "operation": "create", "databaseId": "REEMPLAZAR_ID_DATABASE_PIPELINE", "title": "={{ $json.ficha.perfil.nombre || $json.cliente_id }}",
+        "propertiesUi": {"propertyValues": [
+          {"key": "Empresa|rich_text", "textContent": "={{ $json.ficha.perfil.empresa || '' }}"},
+          {"key": "Canal|select", "selectValue": "={{ $json.canal }}"},
+          {"key": "Etapa|select", "selectValue": "={{ $json.ficha.etapa }}"},
+          {"key": "Producto|select", "selectValue": "={{ $json.ficha.perfil.producto_interes }}"},
+          {"key": "Dolor|rich_text", "textContent": "={{ $json.ficha.perfil.dolor || '' }}"},
+          {"key": "Sugerencias|rich_text", "textContent": "={{ ($json.ficha.perfil.sugerencias_cierre || []).join(' · ') }}"},
+          {"key": "Última sesión|date", "date": "={{ $json.ficha.actualizado_en }}"},
+          {"key": "cliente_id|rich_text", "textContent": "={{ $json.cliente_id }}"}
+        ]}
+      },
+      "name": "Notion · Upsert pipeline", "type": "n8n-nodes-base.notion", "typeVersion": 2.2, "position": [1100, 300],
+      "credentials": {"notionApi": {"id": "REEMPLAZAR", "name": "Notion DZ Labs"}},
+      "notes": "Para upsert real: antes un nodo Notion 'Get Many' filtrando cliente_id y un IF create/update. Simplificado aquí."
+    },
+    {
+      "parameters": {
+        "resource": "page", "operation": "create", "pageId": "REEMPLAZAR_ID_PAGINA_PADRE_DIAGNOSTICOS",
+        "title": "=Diagnóstico · {{ $json.ficha.perfil.empresa || $json.cliente_id }}",
+        "blockUi": {"blockValues": [{"type": "paragraph", "textContent": "={{ $json.markdown }}"}]}
+      },
+      "name": "Notion · Página diagnóstico", "type": "n8n-nodes-base.notion", "typeVersion": 2.2, "position": [1100, 480],
+      "credentials": {"notionApi": {"id": "REEMPLAZAR", "name": "Notion DZ Labs"}}
+    },
+    {
+      "parameters": {"conditions": {"conditions": [{"leftValue": "={{ $json.bloqueante }}", "rightValue": true, "operator": {"type": "boolean", "operation": "true"}}]}},
+      "name": "¿Bloqueante?", "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [1100, 660]
+    },
+    {
+      "parameters": {"resource": "message", "operation": "send", "from": "={{ $env.DZ_TWILIO_FROM }}", "to": "={{ $env.DZ_SEBAS_WHATSAPP }}", "toWhatsapp": true,
+        "message": "=🚨 Incidencia BLOQUEANTE #{{ $json.incidencia_id }} de {{ $json.cliente_id }}\n{{ $json.titulo }}\n{{ $json.descripcion }}\n🔗 {{ $json.link_hilo }}"},
+      "name": "Twilio · Escalar incidencia", "type": "n8n-nodes-base.twilio", "typeVersion": 1, "position": [1320, 660],
+      "credentials": {"twilioApi": {"id": "REEMPLAZAR", "name": "Twilio DZ Labs"}}
+    }
+  ],
+  "connections": {
+    "Webhook eventos": {"main": [[{"node": "Code · Verificar firma", "type": "main", "index": 0}]]},
+    "Code · Verificar firma": {"main": [[{"node": "¿Firma válida?", "type": "main", "index": 0}]]},
+    "¿Firma válida?": {"main": [[{"node": "200", "type": "main", "index": 0}, {"node": "Switch tipo", "type": "main", "index": 0}], [{"node": "403", "type": "main", "index": 0}]]},
+    "Switch tipo": {"main": [
+      [{"node": "Code · Formatear aviso", "type": "main", "index": 0}, {"node": "Notion · Upsert pipeline", "type": "main", "index": 0}],
+      [{"node": "Notion · Página diagnóstico", "type": "main", "index": 0}],
+      [{"node": "¿Bloqueante?", "type": "main", "index": 0}],
+      [{"node": "Notion · Upsert pipeline", "type": "main", "index": 0}]
+    ]},
+    "Code · Formatear aviso": {"main": [[{"node": "Twilio · WhatsApp a Sebas", "type": "main", "index": 0}]]},
+    "¿Bloqueante?": {"main": [[{"node": "Twilio · Escalar incidencia", "type": "main", "index": 0}], []]}
+  },
+  "settings": {"executionOrder": "v1"}
+}

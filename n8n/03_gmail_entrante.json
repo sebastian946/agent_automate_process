@@ -1,0 +1,36 @@
+{
+  "name": "DZ Labs · Gmail entrante → /inbound → responder en hilo",
+  "nodes": [
+    {
+      "parameters": {"pollTimes": {"item": [{"mode": "everyMinute"}]}, "simple": false, "filters": {"q": "is:unread -from:me -category:promotions", "labelIds": ["INBOX"]}, "options": {}},
+      "name": "Gmail Trigger", "type": "n8n-nodes-base.gmailTrigger", "typeVersion": 1.2, "position": [0, 300],
+      "credentials": {"gmailOAuth2": {"id": "REEMPLAZAR", "name": "Gmail hola@dzlabs.co"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $json;\nconst from = (m.from?.value?.[0]?.address || m.From || '').toLowerCase();\nlet texto = m.text || m.textPlain || '';\n// limpiar hilo citado\ntexto = texto.split('\\n').filter(l => !l.trim().startsWith('>')).join('\\n');\ntexto = texto.split(/\\n(el|on) .+ (escribió|wrote):?\\n/i)[0].trim();\nif (!from || !texto) return [];\nreturn [{ json: { cliente_id: from, canal: 'email', texto: texto.slice(0, 4000), threadId: m.threadId, messageId: m.id, subject: m.subject } }];"
+      },
+      "name": "Code · Extraer y limpiar", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "={{ $env.DZ_API_URL }}/inbound", "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+        "sendBody": true, "specifyBody": "json", "jsonBody": "={{ { cliente_id: $json.cliente_id, canal: 'email', texto: $json.texto } }}", "options": {"timeout": 60000}
+      },
+      "name": "HTTP · /inbound", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [440, 300],
+      "credentials": {"httpHeaderAuth": {"id": "REEMPLAZAR", "name": "Bearer DZ_INBOUND_TOKEN"}},
+      "notes": "Credencial Header Auth: Name=Authorization, Value=Bearer <INBOUND_API_TOKEN>"
+    },
+    {
+      "parameters": {"resource": "message", "operation": "reply", "messageId": "={{ $('Code · Extraer y limpiar').item.json.messageId }}", "emailType": "text", "message": "={{ $json.respuesta }}", "options": {}},
+      "name": "Gmail · Responder en hilo", "type": "n8n-nodes-base.gmail", "typeVersion": 2.1, "position": [660, 300],
+      "credentials": {"gmailOAuth2": {"id": "REEMPLAZAR", "name": "Gmail hola@dzlabs.co"}}
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {"main": [[{"node": "Code · Extraer y limpiar", "type": "main", "index": 0}]]},
+    "Code · Extraer y limpiar": {"main": [[{"node": "HTTP · /inbound", "type": "main", "index": 0}]]},
+    "HTTP · /inbound": {"main": [[{"node": "Gmail · Responder en hilo", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}
